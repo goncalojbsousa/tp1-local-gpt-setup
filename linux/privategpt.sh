@@ -2,9 +2,17 @@
 # PrivateGPT em http://localhost:8080/ui
 # uso: bash privategpt.sh [stop]
 set -euo pipefail
+SCRIPT=privategpt
 
 msg() { printf '\n\033[1m>> %s\033[0m\n' "$*"; }
 err() { printf '\nErro: %s\n' "$*" >&2; exit 1; }
+
+BASE=https://raw.githubusercontent.com/goncalojbsousa/tp1-local-gpt-setup/main
+case "$(uname -s)" in
+  Linux) ;;
+  Darwin) err "isto é para Linux. No Mac usa: bash <(curl -fsSL $BASE/mac/$SCRIPT.sh)" ;;
+  *) err "isto é para Linux. No Windows usa o PowerShell: irm $BASE/windows/$SCRIPT.ps1 | iex" ;;
+esac
 
 [[ $EUID -eq 0 ]] && err "não corras como root nem com sudo, o script pede a password quando precisar"
 command -v sudo >/dev/null || err "sudo não está instalado"

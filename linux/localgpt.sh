@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# Open WebUI em http://localhost:3001
-# uso: bash open-webui.sh [stop]
+# LocalGPT em http://localhost:3000
+# uso: bash localgpt.sh [stop]
 set -euo pipefail
+SCRIPT=localgpt
 
 msg() { printf '\n\033[1m>> %s\033[0m\n' "$*"; }
 err() { printf '\nErro: %s\n' "$*" >&2; exit 1; }
+
+BASE=https://raw.githubusercontent.com/goncalojbsousa/tp1-local-gpt-setup/main
+case "$(uname -s)" in
+  Linux) ;;
+  Darwin) err "isto é para Linux. No Mac usa: bash <(curl -fsSL $BASE/mac/$SCRIPT.sh)" ;;
+  *) err "isto é para Linux. No Windows usa o PowerShell: irm $BASE/windows/$SCRIPT.ps1 | iex" ;;
+esac
 
 [[ $EUID -eq 0 ]] && err "não corras como root nem com sudo, o script pede a password quando precisar"
 command -v sudo >/dev/null || err "sudo não está instalado"
@@ -87,29 +95,49 @@ open_when_ready() {
   echo "ainda não respondeu, tenta abrir $1 daqui a pouco. logs: $3"
 }
 
-NAME=open-webui
-PORT=3001
+DEST=$HOME/localGPT
 MODEL=qwen3.5:4b
 
 if [[ ${1:-} == stop ]]; then
-  DOCKER=docker; docker info >/dev/null 2>&1 || DOCKER="sudo docker"
-  $DOCKER stop "$NAME"; exit
+  [[ -x $DEST/start-docker.sh ]] || err "LocalGPT não está instalado em $DEST"
+  cd "$DEST"
+  if docker info >/dev/null 2>&1; then ./start-docker.sh stop; else sudo ./start-docker.sh stop; fi
+  exit
 fi
 
 ensure_pkg curl curl
+ensure_pkg git git
 ensure_docker
+
+if [[ -d $DEST/.git ]]; then
+  echo "repositório já existe em $DEST"
+else
+  msg "a clonar o LocalGPT"
+  git clone https://github.com/PromtEngineer/localGPT.git "$DEST"
+fi
+if [[ ! -f $DEST/start-docker.sh ]]; then
+  git -C "$DEST" fetch origin localgpt-v2 && git -C "$DEST" checkout localgpt-v2
+fi
+[[ -f $DEST/start-docker.sh ]] || err "start-docker.sh não encontrado"
+chmod +x "$DEST/start-docker.sh"
+
+# o docker.env do projeto usa modelos maiores, aqui usa-se o mesmo modelo em tudo
+sed -i "s|^GENERATION_MODEL=.*|GENERATION_MODEL=$MODEL|; s|^ENRICHMENT_MODEL=.*|ENRICHMENT_MODEL=$MODEL|" "$DEST/docker.env"
+
 ensure_ollama
+# por defeito o ollama só aceita 127.0.0.1 e os contentores não lhe chegam
+OVERRIDE=/etc/systemd/system/ollama.service.d/override.conf
+if [[ ! -f $OVERRIDE ]]; then
+  sudo mkdir -p "$(dirname "$OVERRIDE")"
+  printf '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0"\n' | sudo tee "$OVERRIDE" >/dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl restart ollama
+  ensure_ollama
+fi
 ensure_model "$MODEL"
 ensure_model mxbai-embed-large
 
-ensure_container "$NAME" --network=host \
-  -e PORT="$PORT" \
-  -e OLLAMA_BASE_URL=http://127.0.0.1:11434 \
-  -e RAG_EMBEDDING_ENGINE=ollama \
-  -e RAG_EMBEDDING_MODEL=mxbai-embed-large \
-  -e RAG_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
-  -v open-webui:/app/backend/data \
-  ghcr.io/open-webui/open-webui:main
-
-echo "na primeira vez cria uma conta local (o primeiro utilizador é o admin)"
-open_when_ready "http://localhost:$PORT" 240 "docker logs -f $NAME"
+msg "a construir e arrancar (na primeira vez demora vários minutos)"
+cd "$DEST"
+if [[ $DOCKER == docker ]]; then ./start-docker.sh local; else sudo ./start-docker.sh local; fi
+open_when_ready "http://localhost:3000" 300 "cd $DEST && docker compose logs -f"
