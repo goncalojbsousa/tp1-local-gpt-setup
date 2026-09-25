@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # LocalGPT em http://localhost:3000
-# uso: bash localgpt.sh [--light | stop]
+# uso: bash localgpt.sh [stop]
 set -euo pipefail
 
 msg() { printf '\n\033[1m>> %s\033[0m\n' "$*"; }
@@ -88,6 +88,7 @@ open_when_ready() {
 }
 
 DEST=$HOME/localGPT
+MODEL=qwen3.5:4b
 
 if [[ ${1:-} == stop ]]; then
   [[ -x $DEST/start-docker.sh ]] || err "LocalGPT não está instalado em $DEST"
@@ -95,9 +96,6 @@ if [[ ${1:-} == stop ]]; then
   if docker info >/dev/null 2>&1; then ./start-docker.sh stop; else sudo ./start-docker.sh stop; fi
   exit
 fi
-
-LIGHT=0
-[[ ${1:-} == --light ]] && LIGHT=1
 
 ensure_pkg curl curl
 ensure_pkg git git
@@ -115,15 +113,8 @@ fi
 [[ -f $DEST/start-docker.sh ]] || err "start-docker.sh não encontrado"
 chmod +x "$DEST/start-docker.sh"
 
-# os modelos estão no docker.env, o README está desatualizado
-get_env() { grep -E "^$1=" "$DEST/docker.env" 2>/dev/null | head -n1 | cut -d= -f2- || true; }
-[[ $LIGHT -eq 0 ]] && git -C "$DEST" checkout -- docker.env 2>/dev/null || true
-GEN=$(get_env GENERATION_MODEL); GEN=${GEN:-qwen3.5:9b}
-ENR=$(get_env ENRICHMENT_MODEL); ENR=${ENR:-qwen3.5:4b}
-if [[ $LIGHT -eq 1 ]]; then
-  sed -i "s|^GENERATION_MODEL=.*|GENERATION_MODEL=$ENR|" "$DEST/docker.env"
-  GEN=$ENR
-fi
+# o docker.env do projeto usa modelos maiores, aqui usa-se o mesmo modelo em tudo
+sed -i "s|^GENERATION_MODEL=.*|GENERATION_MODEL=$MODEL|; s|^ENRICHMENT_MODEL=.*|ENRICHMENT_MODEL=$MODEL|" "$DEST/docker.env"
 
 ensure_ollama
 # por defeito o ollama só aceita 127.0.0.1 e os contentores não lhe chegam
@@ -135,8 +126,7 @@ if [[ ! -f $OVERRIDE ]]; then
   sudo systemctl restart ollama
   ensure_ollama
 fi
-ensure_model "$GEN"
-[[ $ENR != "$GEN" ]] && ensure_model "$ENR"
+ensure_model "$MODEL"
 ensure_model mxbai-embed-large
 
 msg "a construir e arrancar (na primeira vez demora vários minutos)"
