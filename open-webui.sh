@@ -89,6 +89,7 @@ open_when_ready() {
 
 NAME=open-webui
 PORT=3001
+MODEL=qwen3.5:4b
 
 if [[ ${1:-} == stop ]]; then
   DOCKER=docker; docker info >/dev/null 2>&1 || DOCKER="sudo docker"
@@ -98,12 +99,15 @@ fi
 ensure_pkg curl curl
 ensure_docker
 ensure_ollama
-ensure_model qwen3.5:4b
+ensure_model "$MODEL"
 ensure_model mxbai-embed-large
 
 ensure_container "$NAME" --network=host \
   -e PORT="$PORT" \
   -e OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+  -e RAG_EMBEDDING_ENGINE=ollama \
+  -e RAG_EMBEDDING_MODEL=mxbai-embed-large \
+  -e RAG_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
   -v open-webui:/app/backend/data \
   ghcr.io/open-webui/open-webui:main
 
