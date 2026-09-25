@@ -88,6 +88,7 @@ open_when_ready() {
 }
 
 NAME=privategpt
+MODEL=qwen3.5:4b
 OLLAMA_URL=http://localhost:11434/v1
 
 if [[ ${1:-} == stop ]]; then
@@ -98,7 +99,7 @@ fi
 ensure_pkg curl curl
 ensure_docker
 ensure_ollama
-ensure_model qwen3.5:4b
+ensure_model "$MODEL"
 ensure_model mxbai-embed-large
 
 # network host para o contentor chegar ao ollama em localhost
